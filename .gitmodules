@@ -29,8 +29,9 @@
 	url = https://github.com/philippe44/crosstools
 [submodule "common/libraop"]
 	path = common/libraop
-	url = https://github.com/philippe44/libraop
+	url = https://github.com/noahp-info/libraop
 	fetchRecurseSubmodules = no	
+	branch = local/pause-release-1.12.4
 [submodule "common/libpthreads4w"]
 	path = common/libpthreads4w
 	url = https://github.com/philippe44/libpthreads4w

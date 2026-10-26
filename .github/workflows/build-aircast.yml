@@ -17,9 +17,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: recursive
-      - name: Build
+      - name: Build libraop (fork: pause release + Audio-Latency fixes)
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq build-essential
+          cd common/libraop
+          make CC=gcc AR=ar STATIC=1 PLATFORM=aarch64 HOST=linux lib -j4
+          cp lib/linux/aarch64/libraop.a targets/linux/aarch64/libraop.a
+          strings targets/linux/aarch64/libraop.a | grep -c "Audio-Latency"
+      - name: Build
+        run: |
           cd aircast
           make CC=gcc HOST=linux PLATFORM=aarch64 -j4
           ls -la ../bin
@@ -33,4 +39,4 @@ jobs:
         run: |
           sha256sum bin/aircast-linux-aarch64-static > bin/aircast-linux-aarch64-static.sha256
           gh release create "$GITHUB_REF_NAME" bin/aircast-linux-aarch64-static bin/aircast-linux-aarch64-static.sha256 \
-            --title "$GITHUB_REF_NAME" --notes "aircast 1.12.4 + Cast queue timeout + ping_host fix. Fork build for Home Assistant." --prerelease
+            --title "$GITHUB_REF_NAME" --notes "aircast 1.12.4 + Cast queue timeout + ping_host fix + libraop pause-release and Audio-Latency fixes. Fork build for Home Assistant." --prerelease
