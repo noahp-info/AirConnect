@@ -187,6 +187,7 @@ static void raop_cb(void *owner, raopsr_event_t event, ...) {
 			break;
 		case RAOP_STOP:
 			LOG_INFO("[%p]: Stop", Device);
+			Device->LoadStamp = 0;
 			if (Device->RaopState == RAOP_PLAY) {
 				CastStop(Device->CastCtx);
 				Device->ExpectStop = true;
@@ -222,6 +223,8 @@ static void raop_cb(void *owner, raopsr_event_t event, ...) {
 				(void) !asprintf(&uri, "http://%s:%u/stream-%u.%s", inet_ntoa(glHost), port, count++, codec);
 
 				CastLoad(Device->CastCtx, uri, ContentType, Device->Name, &MetaData, 0);
+				Device->LoadStamp = gettime_ms();
+				Device->LoadWarned = false;
 				LOG_INFO("[%p]: Cast setURI %s", Device, uri);
 				free(uri);
 			}
@@ -266,6 +269,7 @@ static void raop_cb(void *owner, raopsr_event_t event, ...) {
 
 /*----------------------------------------------------------------------------*/
 #define TRACK_POLL  (1000)
+#define LOAD_TIMEOUT (10000)
 #define MAX_ACTION_ERRORS (5)
 static void *MRThread(void *args) {
 	int elapsed, wakeTimer = TRACK_POLL;
@@ -301,6 +305,7 @@ static void *MRThread(void *args) {
 				if (state && !strcasecmp(state, "PLAYING") && p->State != PLAYING) {
 					LOG_INFO("[%p]: Cast playing", p);
 					p->State = PLAYING;
+					p->LoadStamp = 0;
 					if (p->RaopState != RAOP_PLAY) raopsr_notify(p->Raop, RAOP_PLAY, NULL);
 				}
 
@@ -308,6 +313,16 @@ static void *MRThread(void *args) {
 					LOG_INFO("[%p]: Cast pause", p);
 					p->State = PAUSED;
 					if (p->RaopState == RAOP_PLAY) raopsr_notify(p->Raop, RAOP_PAUSE, NULL);
+				}
+
+				/*
+				LOAD is sent with autoplay off and relies on a PLAY once loaded. If that
+				PLAY arrived while the receiver was still loading, it has been lost and
+				the receiver sits paused forever while AirPlay is playing
+				*/
+				if (state && !strcasecmp(state, "PAUSED") && p->LoadStamp && p->RaopState == RAOP_PLAY) {
+					LOG_INFO("[%p]: Cast loaded but paused, sending PLAY", p);
+					CastPlay(p->CastCtx, NULL);
 				}
 
 				if (state && !strcasecmp(state, "IDLE") && p->State != STOPPED) {
@@ -358,6 +373,12 @@ static void *MRThread(void *args) {
 		if (p->TrackPoll >= TRACK_POLL) {
 			p->TrackPoll = 0;
 			if (p->State != STOPPED) CastGetMediaStatus(p->CastCtx);
+		}
+
+		// make a receiver that never starts visible in the log
+		if (p->LoadStamp && !p->LoadWarned && gettime_ms() - p->LoadStamp > LOAD_TIMEOUT) {
+			LOG_WARN("[%p]: Cast not playing %u ms after LOAD", p, gettime_ms() - p->LoadStamp);
+			p->LoadWarned = true;
 		}
 
 		pthread_mutex_unlock(&p->Mutex);
@@ -650,6 +671,8 @@ static bool AddCastDevice(struct sMR *Device, char *Name, char *UDN, bool group,
 	Device->Group 		= group;
 	Device->Remove		= false;
 	Device->VolumeStampRx = Device->VolumeStampTx = gettime_ms() - 2000;
+	Device->LoadStamp	= 0;
+	Device->LoadWarned	= false;
 
 	if (group) {
 		Device->GroupMaster	= calloc(1, sizeof(struct sGroupMember));

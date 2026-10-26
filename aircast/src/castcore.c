@@ -27,6 +27,7 @@
 #endif
 
 #define SELECT_SOCKET
+#define CAST_WAIT_TIMEOUT	5000
 
 /*----------------------------------------------------------------------------*/
 /* locals */
@@ -523,6 +524,8 @@ static void ProcessQueue(tCastCtx *Ctx) {
 static void *CastPingThread(void *args) {
 	tCastCtx *Ctx = (tCastCtx*) args;
 	uint32_t last = gettime_ms();
+	uint32_t waitStamp = last;
+	int waitId = 0;
 
 	Ctx->running = true;
 
@@ -531,6 +534,23 @@ static void *CastPingThread(void *args) {
 
 		if (now - last > 3000 && Ctx->Status != CAST_DISCONNECTED) {
 			pthread_mutex_lock(&Ctx->Mutex);
+
+			/*
+			A request whose answer never comes blocks the whole queue (PLAY, VOLUME...)
+			until something else clears waitId, which might be never. Unblock it, but
+			not while launching or waiting for the LOAD answer, as these carry state
+			(sessionId, mediaSessionId) we can't rebuild
+			*/
+			if (Ctx->waitId && Ctx->waitId == waitId && Ctx->Status == CAST_LAUNCHED && !Ctx->waitMedia) {
+				if (now - waitStamp > CAST_WAIT_TIMEOUT) {
+					LOG_WARN("[%p]: no answer to request %d after %u ms, unblocking queue", Ctx->owner, Ctx->waitId, now - waitStamp);
+					Ctx->waitId = 0;
+					ProcessQueue(Ctx);
+				}
+			} else {
+				waitId = Ctx->waitId;
+				waitStamp = now;
+			}
 
 			// ping SSL connection
 			if (Ctx->ssl) {

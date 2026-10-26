@@ -70,6 +70,8 @@ struct sMR {
 	pthread_t 		Thread;
 	double			Volume;
 	uint32_t			VolumeStampRx, VolumeStampTx;
+	uint32_t			LoadStamp;
+	bool			LoadWarned;
 	bool			Group;
 	struct sGroupMember {
 		struct sGroupMember	*Next;
