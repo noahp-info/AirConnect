@@ -169,7 +169,7 @@ static bool	 Stop(bool exit);
 /*----------------------------------------------------------------------------*/
 // volume_sync: should the sender's (iPhone's) volume be applied to the cast device now?
 static bool AcceptRaopVolume(struct sMR *Device) {
-	if (Device->Config.VolumeSync == VOLUME_SYNC_ALWAYS) return true;
+	if (Device->Config.VolumeSync == VOLUME_SYNC_ALWAYS || Device->Config.VolumeSync == VOLUME_SYNC_SENDER) return true;
 	if (Device->Config.VolumeSync == VOLUME_SYNC_NEVER) return false;
 	// start only: between sessions (volume may come before RECORD) and for a few seconds after a new stream
 	return Device->RaopState == RAOP_STOP || gettime_ms() - Device->SessionStamp < VOLUME_SYNC_START_WINDOW;

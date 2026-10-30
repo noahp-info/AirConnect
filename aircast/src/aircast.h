@@ -37,7 +37,7 @@
 #define SCAN_INTERVAL	30
 
 enum 	eMRstate { STOPPED, PLAYING, PAUSED };
-enum	eVolumeSync { VOLUME_SYNC_NEVER = 0, VOLUME_SYNC_START = 1, VOLUME_SYNC_ALWAYS = 2 };
+enum	eVolumeSync { VOLUME_SYNC_NEVER = 0, VOLUME_SYNC_START = 1, VOLUME_SYNC_ALWAYS = 2, VOLUME_SYNC_SENDER = 3 };
 
 typedef struct sMRConfig
 {
@@ -52,7 +52,7 @@ typedef struct sMRConfig
 	char		Latency[STR_LEN];
 	bool		Drift;
 	char		ArtWork[4*STR_LEN];
-	int			VolumeSync;	// 0 = never take iPhone volume, 1 = only at session start, 2 = always
+	int			VolumeSync;	// 0 = never take iPhone volume, 1 = only at session start, 2 = always, 3 = iPhone always, never echo cast volume back
 } tMRConfig;
 
 struct sMR {
