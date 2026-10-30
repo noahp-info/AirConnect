@@ -68,6 +68,7 @@ void SaveConfig(char *name, void *ref, bool full) {
 	XMLUpdateNode(doc, common, false, "codec", glMRConfig.Codec);
 	XMLUpdateNode(doc, common, false, "metadata", "%d", glMRConfig.Metadata);
 	XMLUpdateNode(doc, common, false, "flush", "%d", glMRConfig.Flush);
+	XMLUpdateNode(doc, common, false, "volume_sync", "%d", glMRConfig.VolumeSync);
 	XMLUpdateNode(doc, common, false, "artwork", "%s", glMRConfig.ArtWork);
 
 	for (int i = 0; i < glMaxDevices; i++) {
@@ -129,6 +130,7 @@ static void LoadConfigItem(tMRConfig *Conf, char *name, char *val) {
 	if (!strcmp(name, "codec")) strcpy(Conf->Codec, val);
 	if (!strcmp(name, "metadata")) Conf->Metadata = atoi(val);
 	if (!strcmp(name, "flush")) Conf->Flush = atoi(val);
+	if (!strcmp(name, "volume_sync")) Conf->VolumeSync = atoi(val);
 	if (!strcmp(name, "artwork")) strcpy(Conf->ArtWork, val);
 	if (!strcmp(name, "latency")) strcpy(Conf->Latency, val);
 	if (!strcmp(name, "drift")) Conf->Drift = atoi(val);

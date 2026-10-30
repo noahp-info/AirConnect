@@ -33,6 +33,7 @@
 
 #define DISCOVERY_TIME 	20
 #define MEDIA_VOLUME	0.5
+#define VOLUME_SYNC_START_WINDOW	5000	// ms after a new stream during which volume_sync=1 accepts iPhone volume
 
 /*----------------------------------------------------------------------------*/
 /* globals */
@@ -60,6 +61,7 @@ tMRConfig			glMRConfig = {
 							"",		// rtp/http_latency (0 = use client's request)
 							false,	// drift
 							"", 	// artwork
+							VOLUME_SYNC_ALWAYS,	// volume_sync
 					};
 
 
@@ -165,6 +167,15 @@ static bool	 Start(bool cold);
 static bool	 Stop(bool exit);
 
 /*----------------------------------------------------------------------------*/
+// volume_sync: should the sender's (iPhone's) volume be applied to the cast device now?
+static bool AcceptRaopVolume(struct sMR *Device) {
+	if (Device->Config.VolumeSync == VOLUME_SYNC_ALWAYS) return true;
+	if (Device->Config.VolumeSync == VOLUME_SYNC_NEVER) return false;
+	// start only: between sessions (volume may come before RECORD) and for a few seconds after a new stream
+	return Device->RaopState == RAOP_STOP || gettime_ms() - Device->SessionStamp < VOLUME_SYNC_START_WINDOW;
+}
+
+/*----------------------------------------------------------------------------*/
 static void raop_cb(void *owner, raopsr_event_t event, ...) {
 	struct sMR *Device = (struct sMR*) owner;
 	va_list args;
@@ -183,6 +194,7 @@ static void raop_cb(void *owner, raopsr_event_t event, ...) {
 		case RAOP_STREAM:
 			// a PLAY will come later, so we'll do the load at that time
 			LOG_INFO("[%p]: Stream", Device);
+			Device->SessionStamp = gettime_ms();
 			Device->RaopState = event;
 			break;
 		case RAOP_STOP:
@@ -231,14 +243,16 @@ static void raop_cb(void *owner, raopsr_event_t event, ...) {
 
 			CastPlay(Device->CastCtx, NULL);
 
-			CastSetDeviceVolume(Device->CastCtx, Device->Volume, true);
+			if (AcceptRaopVolume(Device)) CastSetDeviceVolume(Device->CastCtx, Device->Volume, true);
 			Device->RaopState = event;
 			break;
 		}
 		case RAOP_VOLUME: {
 			uint32_t now = gettime_ms();
 
-			if (now > Device->VolumeStampRx + 1000) {
+			if (!AcceptRaopVolume(Device)) {
+				LOG_INFO("[%p]: Volume from sender ignored (volume_sync=%d)", Device, Device->Config.VolumeSync);
+			} else if (now > Device->VolumeStampRx + 1000) {
 				Device->Volume = va_arg(args, double);
 				Device->VolumeStampTx = now;
 				CastSetDeviceVolume(Device->CastCtx, Device->Volume, false);
@@ -347,7 +361,7 @@ static void *MRThread(void *args) {
 			}
 
 			// now apply the volume change if any
-			if (Volume != -1 && fabs(Volume - p->Volume) >= 0.01 && now > p->VolumeStampTx + 1000) {
+			if (Volume != -1 && p->Config.VolumeSync == VOLUME_SYNC_ALWAYS && fabs(Volume - p->Volume) >= 0.01 && now > p->VolumeStampTx + 1000) {
 				p->VolumeStampRx = now;
 				p->VolumeStampRx = now;
 				LOG_INFO("[%p]: Volume local change %0.4lf", p, Volume);
