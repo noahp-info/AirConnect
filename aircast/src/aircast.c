@@ -33,6 +33,9 @@
 
 #define DISCOVERY_TIME 	20
 #define MEDIA_VOLUME	0.5
+#define REMOVE_PING_INTERVAL	5000	// ms between pings of a device whose mDNS record expired
+#define REMOVE_PING_WAIT		900		// ms to wait for each ping reply (ping_host takes < 1000)
+#define REMOVE_GRACE			60000	// ms of failed pings before a device is removed
 #define VOLUME_SYNC_START_WINDOW	5000	// ms after a new stream during which volume_sync=1 accepts iPhone volume
 
 /*----------------------------------------------------------------------------*/
@@ -429,15 +432,29 @@ static void UpdateDevices() {
 
 	for (int i = 0; i < glMaxDevices; i++) {
 		struct sMR *Device = glMRDevices + i;
-		if (Device->Running && Device->Remove && !CastIsConnected(Device->CastCtx)) {
-			struct in_addr addr = CastGetAddr(glMRDevices[i].CastCtx);
-			if (!ping_host(addr, 100)) {
-				LOG_INFO("[%p]: removing renderer (%s)", Device, Device->Config.Name);
-				raopsr_delete(Device->Raop);
-				RemoveCastDevice(Device);
-			} else {
-				LOG_DEBUG("[%p]: (%s) mute to mDNS search, but answers ping, so keep it", Device, Device->Config.Name);
-			}
+		if (!Device->Running) continue;
+		if (!Device->Remove) {
+			Device->PingFailStamp = 0;
+			continue;
+		}
+		if (CastIsConnected(Device->CastCtx)) continue;
+
+		// a slow Wi-Fi speaker can miss one short ping: retry every few seconds, remove only after a long silence
+		uint32_t now = gettime_ms();
+		if (now - Device->PingStamp < REMOVE_PING_INTERVAL) continue;
+		Device->PingStamp = now;
+
+		struct in_addr addr = CastGetAddr(glMRDevices[i].CastCtx);
+		if (ping_host(addr, REMOVE_PING_WAIT)) {
+			Device->PingFailStamp = 0;
+			LOG_DEBUG("[%p]: (%s) mute to mDNS search, but answers ping, so keep it", Device, Device->Config.Name);
+		} else if (!Device->PingFailStamp) {
+			Device->PingFailStamp = now;
+			LOG_INFO("[%p]: (%s) missed ping, removing it if still silent in %ds", Device, Device->Config.Name, REMOVE_GRACE / 1000);
+		} else if (now - Device->PingFailStamp >= REMOVE_GRACE) {
+			LOG_INFO("[%p]: removing renderer (%s)", Device, Device->Config.Name);
+			raopsr_delete(Device->Raop);
+			RemoveCastDevice(Device);
 		}
 	}
 
@@ -684,6 +701,7 @@ static bool AddCastDevice(struct sMR *Device, char *Name, char *UDN, bool group,
 	Device->RaopState	= RAOP_STOP;
 	Device->Group 		= group;
 	Device->Remove		= false;
+	Device->PingStamp	= Device->PingFailStamp = 0;
 	Device->VolumeStampRx = Device->VolumeStampTx = gettime_ms() - 2000;
 	Device->LoadStamp	= 0;
 	Device->LoadWarned	= false;

@@ -74,6 +74,7 @@ struct sMR {
 	uint32_t			VolumeStampRx, VolumeStampTx;
 	uint32_t			LoadStamp;
 	uint32_t			SessionStamp;
+	uint32_t			PingStamp, PingFailStamp;	// removal grace when mDNS goes quiet
 	bool			LoadWarned;
 	bool			Group;
 	struct sGroupMember {
